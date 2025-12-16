@@ -9,15 +9,25 @@ const logger = require('../utils/logger');
  */
 async function getProducts(req, res) {
   try {
-    const products = await db('product')
+    const productsData = await db('products')
       .select(
         'id',
-       'title',
-       'date',
-       'category',
-       'filename',
-       'thumbnail',
+        'title',
+        'date',
+        'category',
+        'filename',
+        'thumbnail'
       )
+
+    // Map to product format
+    const products = productsData.map(product => ({
+      id: product.id,
+      title: product.title,
+      date: product.date,
+      category: product.category,
+      filename: product.filename,
+      thumbnail: product.thumbnail,
+    }));
 
     res.json(products);
   } catch (error) {
@@ -38,6 +48,25 @@ function resolveFilePath(filePath) {
 }
 
 /**
+ * Get the absolute file path for a product
+ * Products store filename as relative path (e.g., "PCS_Planet/file.pdf")
+ * Files are stored under uploads/file/
+ */
+function getProductFilePath(product) {
+  if (!product.filename) {
+    return null;
+  }
+
+  // If filename is already absolute, use as-is
+  if (path.isAbsolute(product.filename)) {
+    return product.filename;
+  }
+
+  // Construct path: uploads/file/{filename}
+  return path.join('uploads', 'file', product.filename);
+}
+
+/**
  * Download product file
  * GET /api/products/:id/download
  */
@@ -45,23 +74,24 @@ async function downloadProduct(req, res) {
   try {
     const { id } = req.params;
 
-    const upload = await db('uploads').where('id', id).first();
+    const product = await db('products').where('id', id).first();
 
-    if (!upload) {
+    if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    if (!upload.file_path) {
+    const filePath = getProductFilePath(product);
+    if (!filePath) {
       return res.status(404).json({ error: 'File path not available for this product' });
     }
 
-    const absolutePath = resolveFilePath(upload.file_path);
+    const absolutePath = resolveFilePath(filePath);
 
     if (!fs.existsSync(absolutePath)) {
       return res.status(404).json({ error: 'File not found on server' });
     }
 
-    const downloadName = upload.original_filename || path.basename(absolutePath);
+    const downloadName = product.filename ? path.basename(product.filename) : path.basename(absolutePath);
 
     logger.info(`Downloading product ${id} from ${absolutePath}`);
 
@@ -89,23 +119,24 @@ async function previewProduct(req, res) {
   try {
     const { id } = req.params;
 
-    const upload = await db('uploads').where('id', id).first();
+    const product = await db('products').where('id', id).first();
 
-    if (!upload) {
+    if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    if (!upload.file_path) {
+    const filePath = getProductFilePath(product);
+    if (!filePath) {
       return res.status(404).json({ error: 'File path not available for this product' });
     }
 
-    const absolutePath = resolveFilePath(upload.file_path);
+    const absolutePath = resolveFilePath(filePath);
 
     if (!fs.existsSync(absolutePath)) {
       return res.status(404).json({ error: 'File not found on server' });
     }
 
-    const fileName = upload.original_filename || path.basename(absolutePath);
+    const fileName = product.filename ? path.basename(product.filename) : path.basename(absolutePath);
 
     logger.info(`Previewing product ${id} from ${absolutePath}`);
 
@@ -113,8 +144,14 @@ async function previewProduct(req, res) {
       'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
     };
 
-    if (upload.mime_type) {
-      headers['Content-Type'] = upload.mime_type;
+    // Try to infer mime type from file extension if needed
+    const ext = path.extname(absolutePath).toLowerCase();
+    if (ext === '.pdf') {
+      headers['Content-Type'] = 'application/pdf';
+    } else if (ext === '.jpg' || ext === '.jpeg') {
+      headers['Content-Type'] = 'image/jpeg';
+    } else if (ext === '.png') {
+      headers['Content-Type'] = 'image/png';
     }
 
     res.sendFile(absolutePath, { headers }, (err) => {

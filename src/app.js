@@ -5,9 +5,7 @@ const multer = require('multer');
 const logger = require('./utils/logger');
 
 // Import routes
-const uploadRoutes = require('./routes/upload.routes');
-const mapRoutes = require('./routes/map.routes');
-const layerRoutes = require('./routes/layer.routes');
+
 const productRoutes = require('./routes/product.routes');
 
 // Create Express app
@@ -37,9 +35,6 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/api/upload', uploadRoutes);
-app.use('/api/maps', mapRoutes);
-app.use('/api/layers', layerRoutes);
 app.use('/api/products', productRoutes);
 
 // Error handling middleware
