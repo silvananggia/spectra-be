@@ -16,8 +16,8 @@ services:
       - "8888:8888"
     volumes:
       # Mount uploads directory (persistent storage)
-      - ./uploads:/app/uploads
-      - ./logs:/app/logs
+      - ./uploads:/usr/src/app/uploads
+      - ./logs:/usr/src/app/logs
     networks:
       gisnet:
         aliases:
