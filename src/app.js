@@ -40,7 +40,7 @@ const corsOptions = {
   credentials: false, // Set to false since we're not using withCredentials in axios
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-user-id', 'x-user-role'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range', 'Content-Type', 'Cache-Control'],
 };
 
 app.use(cors(corsOptions));

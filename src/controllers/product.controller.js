@@ -115,6 +115,24 @@ function getProductFilePath(product) {
 }
 
 /**
+ * Get the absolute thumbnail path for a product
+ * Thumbnails are stored under uploads/thumbnails/
+ */
+function getProductThumbnailPath(product) {
+  if (!product.thumbnail) {
+    return null;
+  }
+
+  // If thumbnail path is already absolute, use as-is
+  if (path.isAbsolute(product.thumbnail)) {
+    return product.thumbnail;
+  }
+
+  // Construct path: uploads/thumbnails/{thumbnail}
+  return path.join('uploads', 'thumbnails', product.thumbnail);
+}
+
+/**
  * Download product file
  * GET /api/products/:id/download
  */
@@ -162,6 +180,7 @@ async function downloadProduct(req, res) {
 /**
  * Preview product file (inline)
  * GET /api/products/:id/preview
+ * Serves thumbnail if available, otherwise falls back to main file
  */
 async function previewProduct(req, res) {
   try {
@@ -173,33 +192,97 @@ async function previewProduct(req, res) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    const filePath = getProductFilePath(product);
-    if (!filePath) {
-      return res.status(404).json({ error: 'File path not available for this product' });
+    // Try to serve thumbnail first if available
+    let filePath = null;
+    let absolutePath = null;
+    let isThumbnail = false;
+    
+    if (product.thumbnail) {
+      const thumbnailPath = getProductThumbnailPath(product);
+      if (thumbnailPath) {
+        const thumbnailAbsolutePath = resolveFilePath(thumbnailPath);
+        if (fs.existsSync(thumbnailAbsolutePath)) {
+          filePath = thumbnailPath;
+          absolutePath = thumbnailAbsolutePath;
+          isThumbnail = true;
+          const thumbExt = path.extname(thumbnailAbsolutePath).toLowerCase();
+          logger.info(`Previewing product ${id} thumbnail from ${absolutePath} (extension: ${thumbExt})`);
+        } else {
+          logger.warn(`Thumbnail file not found at ${thumbnailAbsolutePath} for product ${id}`);
+        }
+      }
     }
 
-    const absolutePath = resolveFilePath(filePath);
+    // Fall back to main file if no thumbnail or thumbnail doesn't exist
+    if (!filePath || !absolutePath) {
+      filePath = getProductFilePath(product);
+      if (!filePath) {
+        return res.status(404).json({ error: 'File path not available for this product' });
+      }
 
-    if (!fs.existsSync(absolutePath)) {
-      return res.status(404).json({ error: 'File not found on server' });
+      absolutePath = resolveFilePath(filePath);
+      if (!fs.existsSync(absolutePath)) {
+        return res.status(404).json({ error: 'File not found on server' });
+      }
+
+      logger.info(`Previewing product ${id} from ${absolutePath}`);
     }
 
-    const fileName = product.filename ? path.basename(product.filename) : path.basename(absolutePath);
+    const fileName = isThumbnail
+      ? (product.thumbnail ? path.basename(product.thumbnail) : path.basename(absolutePath))
+      : (product.filename ? path.basename(product.filename) : path.basename(absolutePath));
 
-    logger.info(`Previewing product ${id} from ${absolutePath}`);
+    // Get file extension from both absolute path and filename to ensure we detect it correctly
+    let ext = path.extname(absolutePath).toLowerCase();
+    // Fallback: try to get extension from the original filename if absolute path doesn't have one
+    if (!ext || ext === '') {
+      if (isThumbnail && product.thumbnail) {
+        ext = path.extname(product.thumbnail).toLowerCase();
+        logger.info(`Using extension from thumbnail field: ${ext}`);
+      } else if (product.filename) {
+        ext = path.extname(product.filename).toLowerCase();
+        logger.info(`Using extension from filename field: ${ext}`);
+      }
+    }
+    
+    logger.info(`Determined file extension: ${ext}, Content-Type will be set accordingly`);
 
     const headers = {
       'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
     };
 
-    // Try to infer mime type from file extension if needed
-    const ext = path.extname(absolutePath).toLowerCase();
-    if (ext === '.pdf') {
-      headers['Content-Type'] = 'application/pdf';
-    } else if (ext === '.jpg' || ext === '.jpeg') {
+    // Determine Content-Type based on file extension
+    // Thumbnails are always images (PNG or JPG), so prioritize image types
+    if (ext === '.jpg' || ext === '.jpeg') {
       headers['Content-Type'] = 'image/jpeg';
     } else if (ext === '.png') {
       headers['Content-Type'] = 'image/png';
+    } else if (ext === '.gif') {
+      headers['Content-Type'] = 'image/gif';
+    } else if (ext === '.webp') {
+      headers['Content-Type'] = 'image/webp';
+    } else if (ext === '.svg') {
+      headers['Content-Type'] = 'image/svg+xml';
+    } else if (ext === '.bmp') {
+      headers['Content-Type'] = 'image/bmp';
+    } else if (ext === '.tiff' || ext === '.tif') {
+      headers['Content-Type'] = 'image/tiff';
+    } else if (ext === '.pdf') {
+      headers['Content-Type'] = 'application/pdf';
+    } else if (isThumbnail) {
+      // If it's a thumbnail but we can't determine the type, default to PNG
+      // since thumbnails from PDFs are PNG and most image thumbnails are JPG/PNG
+      headers['Content-Type'] = 'image/png';
+      logger.warn(`Could not determine Content-Type for thumbnail ${absolutePath}, defaulting to image/png`);
+    } else {
+      // Default to octet-stream if we can't determine the type
+      headers['Content-Type'] = 'application/octet-stream';
+    }
+
+    // Add cache headers for images to improve performance
+    if (headers['Content-Type'].startsWith('image/')) {
+      headers['Cache-Control'] = 'public, max-age=31536000'; // Cache for 1 year
+      headers['X-Content-Type-Options'] = 'nosniff';
     }
 
     res.sendFile(absolutePath, { headers }, (err) => {
