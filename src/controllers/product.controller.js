@@ -5,10 +5,38 @@ const logger = require('../utils/logger');
 
 /**
  * Get all products (completed uploads)
- * GET /api/products
+ * GET /api/products?page=1&limit=10
  */
 async function getProducts(req, res) {
   try {
+    // Parse pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    // Validate pagination parameters
+    if (page < 1) {
+      return res.status(400).json({
+        status: 'error',
+        code: 400,
+        message: 'Page number must be greater than 0',
+      });
+    }
+
+    if (limit < 1 || limit > 100) {
+      return res.status(400).json({
+        status: 'error',
+        code: 400,
+        message: 'Limit must be between 1 and 100',
+      });
+    }
+
+    // Get total count for pagination metadata
+    const totalCountResult = await db('products').count('id as count').first();
+    const total = parseInt(totalCountResult.count) || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Fetch paginated products
     const productsData = await db('products')
       .select(
         'id',
@@ -18,6 +46,9 @@ async function getProducts(req, res) {
         'filename',
         'thumbnail'
       )
+      .orderBy('id', 'desc')
+      .limit(limit)
+      .offset(offset);
 
     // Map to product format
     const products = productsData.map(product => ({
@@ -29,10 +60,27 @@ async function getProducts(req, res) {
       thumbnail: product.thumbnail,
     }));
 
-    res.json(products);
+    // Return structured response with status, code, and pagination
+    res.status(200).json({
+      status: 'success',
+      code: 200,
+      data: products,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
   } catch (error) {
     logger.error('Error fetching products:', error);
-    res.status(500).json({ error: 'Failed to fetch products' });
+    res.status(500).json({
+      status: 'error',
+      code: 500,
+      message: 'Failed to fetch products',
+    });
   }
 }
 
