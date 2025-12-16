@@ -7,19 +7,6 @@ const config = knexConfig[environment];
 // Create Knex instance
 const db = knex(config);
 
-/**
- * Initialize PostGIS extension
- * This should be run after connecting to the database
- */
-async function initializePostGIS() {
-  try {
-    await db.raw('CREATE EXTENSION IF NOT EXISTS postgis;');
-    console.log('PostGIS extension initialized');
-  } catch (error) {
-    console.error('Error initializing PostGIS:', error.message);
-    throw error;
-  }
-}
 
 /**
  * Test database connection

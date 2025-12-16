@@ -4,11 +4,11 @@ module.exports = {
   development: {
     client: 'postgresql',
     connection: {
-      host: process.env.DB_HOST || 'localhost',
+      host: process.env.DB_HOST || 'postgres-db-1',
       port: process.env.DB_PORT || 5432,
-      database: process.env.DB_NAME || 'spectra_gis',
+      database: process.env.DB_NAME || 'spectra',
       user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
+      password: process.env.DB_PASSWORD || 'password',
     },
     pool: {
       min: 2,
