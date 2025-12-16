@@ -1,94 +1,29 @@
 version: '3.8'
 
 services:
-  # PostgreSQL with PostGIS
-  postgres:
-    image: postgis/postgis:15-3.3
-    container_name: spectra-postgres
-    environment:
-      POSTGRES_DB: ${DB_NAME:-spectra_gis}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - spectra-network
-
-  # GeoServer
-  geoserver:
-    image: oscarfonts/geoserver:2.23.1
-    container_name: spectra-geoserver
-    environment:
-      GEOSERVER_ADMIN_USER: ${GEOSERVER_USER:-admin}
-      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_PASSWORD:-geoserver}
-      GEOSERVER_DATA_DIR: /var/local/geoserver
-    ports:
-      - "8080:8080"
-    volumes:
-      - geoserver_data:/var/local/geoserver
-      # Mount uploads directory so GeoServer can access GeoTIFF files
-      - ./uploads/geotiffs:/data/geotiffs:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/geoserver/web"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    networks:
-      - spectra-network
-
-  # Backend API
+    # Backend API
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: spectra-backend
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-spectra_gis}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      GEOSERVER_URL: http://geoserver:8080/geoserver
-      GEOSERVER_USER: ${GEOSERVER_USER:-admin}
-      GEOSERVER_PASSWORD: ${GEOSERVER_PASSWORD:-geoserver}
-      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE:-spectra}
+
       UPLOAD_DIR: ./uploads
       MAX_FILE_SIZE: ${MAX_FILE_SIZE:-100000000}
       DEFAULT_EPSG: ${DEFAULT_EPSG:-4326}
     ports:
-      - "3000:3000"
+      - "8888:8888"
     volumes:
       # Mount uploads directory (persistent storage)
       - ./uploads:/app/uploads
       - ./logs:/app/logs
-    depends_on:
-      postgres:
-        condition: service_healthy
-      geoserver:
-        condition: service_healthy
     networks:
-      - spectra-network
+      gisnet:
+        aliases:
+          - spectra-backend.docker
     restart: unless-stopped
 
-volumes:
-  postgres_data:
-    driver: local
-  geoserver_data:
-    driver: local
-
 networks:
-  spectra-network:
-    driver: bridge
-
+  gisnet:
+    external: true

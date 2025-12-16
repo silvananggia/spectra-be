@@ -8,6 +8,7 @@ const logger = require('./utils/logger');
 const uploadRoutes = require('./routes/upload.routes');
 const mapRoutes = require('./routes/map.routes');
 const layerRoutes = require('./routes/layer.routes');
+const productRoutes = require('./routes/product.routes');
 
 // Create Express app
 const app = express();
@@ -39,6 +40,7 @@ app.get('/health', (req, res) => {
 app.use('/api/upload', uploadRoutes);
 app.use('/api/maps', mapRoutes);
 app.use('/api/layers', layerRoutes);
+app.use('/api/products', productRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
