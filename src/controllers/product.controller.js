@@ -5,7 +5,7 @@ const logger = require('../utils/logger');
 
 /**
  * Get all products (completed uploads)
- * GET /api/products?page=1&limit=10
+ * GET /api/products?page=1&limit=10&region=search&category=eventType
  */
 async function getProducts(req, res) {
   try {
@@ -13,6 +13,10 @@ async function getProducts(req, res) {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+
+    // Parse search/filter parameters
+    const region = req.query.region ? req.query.region.trim() : null;
+    const category = req.query.category ? req.query.category.trim() : null;
 
     // Validate pagination parameters
     if (page < 1) {
@@ -31,13 +35,29 @@ async function getProducts(req, res) {
       });
     }
 
+    // Build query with filters
+    let query = db('products');
+    let countQuery = db('products');
+
+    // Apply region filter (search in title)
+    if (region && region !== '') {
+      query = query.where('title', 'ilike', `%${region}%`);
+      countQuery = countQuery.where('title', 'ilike', `%${region}%`);
+    }
+
+    // Apply category filter (event type)
+    if (category && category !== '' && category !== 'Semua kejadian') {
+      query = query.where('category', category);
+      countQuery = countQuery.where('category', category);
+    }
+
     // Get total count for pagination metadata
-    const totalCountResult = await db('products').count('id as count').first();
+    const totalCountResult = await countQuery.count('id as count').first();
     const total = parseInt(totalCountResult.count) || 0;
     const totalPages = Math.ceil(total / limit);
 
     // Fetch paginated products
-    const productsData = await db('products')
+    const productsData = await query
       .select(
         'id',
         'title',
