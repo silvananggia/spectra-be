@@ -44,9 +44,10 @@ async function getProducts(req, res) {
         'date',
         'category',
         'filename',
-        'thumbnail'
+        'thumbnail',
+        'created_at'
       )
-      .orderBy('id', 'desc')
+      .orderBy('created_at', 'desc')
       .limit(limit)
       .offset(offset);
 
