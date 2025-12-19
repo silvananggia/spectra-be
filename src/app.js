@@ -6,8 +6,8 @@ const path = require('path');
 const logger = require('./utils/logger');
 
 // Import routes
-
 const productRoutes = require('./routes/product.routes');
+const mapRoutes = require('./routes/map.routes');
 
 // Create Express app
 const app = express();
@@ -70,6 +70,7 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/products', productRoutes);
+app.use('/api/maps', mapRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
