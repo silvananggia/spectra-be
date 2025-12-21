@@ -434,7 +434,7 @@ async function deleteLayerGroup(req, res) {
 async function createLayer(req, res) {
   try {
     const { groupId } = req.params;
-    const { name, type, url, layer_name, style, z_index, visible } = req.body;
+    const { name, type, url, layer_name, layer_id, style, attribution, z_index, visible } = req.body;
 
     if (!name || !type || !url) {
       return res.status(400).json({
@@ -445,7 +445,7 @@ async function createLayer(req, res) {
     }
 
     // Validate type
-    const validTypes = ['wms', 'wfs', 'xyz', 'mvt', 'geojson'];
+    const validTypes = ['wms', 'wfs', 'xyz', 'mvt', 'geojson', 'arcgis', 'mapserver', 'arcgismapserver'];
     if (!validTypes.includes(type.toLowerCase())) {
       return res.status(400).json({
         status: 'error',
@@ -464,18 +464,28 @@ async function createLayer(req, res) {
       });
     }
 
+    const layerData = {
+      id: uuidv4(), // Generate UUID for new layer
+      group_id: groupId,
+      name,
+      type: type.toLowerCase(),
+      url,
+      layer_name: layer_name || null,
+      style: style || null,
+      z_index: z_index || 0,
+      visible: visible !== undefined ? visible : true,
+    };
+    
+    // Add optional fields if provided
+    if (layer_id !== undefined && layer_id !== null && layer_id !== '') {
+      layerData.layer_id = layer_id;
+    }
+    if (attribution !== undefined && attribution !== null && attribution !== '') {
+      layerData.attribution = attribution;
+    }
+    
     const [layer] = await db('layers')
-      .insert({
-        id: uuidv4(), // Generate UUID for new layer
-        group_id: groupId,
-        name,
-        type: type.toLowerCase(),
-        url,
-        layer_name: layer_name || null,
-        style: style || null,
-        z_index: z_index || 0,
-        visible: visible !== undefined ? visible : true,
-      })
+      .insert(layerData)
       .returning('*');
 
     res.status(201).json({
@@ -485,10 +495,18 @@ async function createLayer(req, res) {
     });
   } catch (error) {
     logger.error('Error creating layer:', error);
+    
+    // Provide more detailed error information
+    const errorMessage = error.message || 'Failed to create layer';
+    const isDatabaseError = error.code === '42703' || error.code === '42P01' || error.message?.includes('column') || error.message?.includes('does not exist');
+    
     res.status(500).json({
       status: 'error',
       code: 500,
-      message: 'Failed to create layer',
+      message: isDatabaseError 
+        ? 'Database schema error. Please run migrations to add layer_id and attribution columns.'
+        : errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 }
@@ -500,7 +518,7 @@ async function createLayer(req, res) {
 async function updateLayer(req, res) {
   try {
     const { id } = req.params;
-    const { name, type, url, layer_name, style, z_index, visible } = req.body;
+    const { name, type, url, layer_name, layer_id, style, attribution, z_index, visible } = req.body;
 
     const existingLayer = await db('layers').where('id', id).first();
     if (!existingLayer) {
@@ -514,7 +532,7 @@ async function updateLayer(req, res) {
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (type !== undefined) {
-      const validTypes = ['wms', 'wfs', 'xyz', 'mvt', 'geojson'];
+      const validTypes = ['wms', 'wfs', 'xyz', 'mvt', 'geojson', 'arcgis', 'mapserver', 'arcgismapserver'];
       if (!validTypes.includes(type.toLowerCase())) {
         return res.status(400).json({
           status: 'error',
@@ -526,7 +544,15 @@ async function updateLayer(req, res) {
     }
     if (url !== undefined) updateData.url = url;
     if (layer_name !== undefined) updateData.layer_name = layer_name;
+    if (layer_id !== undefined) {
+      // Allow null or empty string to clear the field
+      updateData.layer_id = layer_id === '' ? null : layer_id;
+    }
     if (style !== undefined) updateData.style = style;
+    if (attribution !== undefined) {
+      // Allow null or empty string to clear the field
+      updateData.attribution = attribution === '' ? null : attribution;
+    }
     if (z_index !== undefined) updateData.z_index = z_index;
     if (visible !== undefined) updateData.visible = visible;
 
