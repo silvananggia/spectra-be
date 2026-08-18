@@ -15,9 +15,8 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      # Mount uploads directory (persistent storage)
-      - ./uploads:/usr/src/app/uploads
-      - ./logs:/usr/src/app/logs
+      - /home/kris019/RSO/spectra-be/uploads:/usr/src/app/uploads
+      - /home/kris019/RSO/spectra-be/logs:/usr/src/app/logs
     networks:
       gisnet:
         aliases:
